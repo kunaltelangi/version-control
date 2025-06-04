@@ -7,7 +7,7 @@ fn is_repo_initialized() -> bool {
 
 pub async fn run(file: String) -> anyhow::Result<()> {
     if !is_repo_initialized() {
-        println!("No VCS repository found. Run `vcs init` first.");
+        println!("❌ No VCS repository found. Run `vcs init` first.");
         return Ok(());
     }
 
@@ -17,12 +17,22 @@ pub async fn run(file: String) -> anyhow::Result<()> {
 
     let src = Path::new(&file);
     if !src.exists() {
-        println!("File does not exist: {}", file);
+        println!("❌ File does not exist: {}", file);
         return Ok(());
     }
 
     let dest = index_dir.join(&file);
+
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    if dest.exists() {
+        println!("⚠️  Warning: File '{}' already staged. Overwriting...", file);
+    }
+
     fs::copy(&src, &dest)?;
-    println!("Added {} to staging area.", file);
+    println!("✅ Added '{}' to staging area.", file);
+
     Ok(())
 }
