@@ -1,9 +1,25 @@
 use super::*;
 use std::fs;
 
-pub fn execute(target: String) -> Result<()> {
+pub fn execute(target: String, create: bool) -> Result<()> {
     let repo_root = get_repo_root()?;
     let mut config = read_config()?;
+    
+    if create {
+        // Create new branch and switch to it
+        if config.branches.contains_key(&target) {
+            return Err(format!("Branch '{}' already exists", target).into());
+        }
+        
+        let current_commit = get_current_commit_hash()?.unwrap_or_default();
+        config.branches.insert(target.clone(), current_commit);
+        config.current_branch = target.clone();
+        write_config(&config)?;
+        
+        println!("Switched to a new branch '{}'", target);
+        return Ok(());
+    }
+    
     if config.branches.contains_key(&target) {
         config.current_branch = target.clone();
         write_config(&config)?;
@@ -17,6 +33,7 @@ pub fn execute(target: String) -> Result<()> {
         println!("Switched to branch '{}'", target);
         Ok(())
     } else {
+        // Try to checkout by commit hash
         if target.len() >= 8 {
             let kvcs_dir = get_kvcs_dir()?;
             let objects_dir = kvcs_dir.join("objects");
@@ -95,10 +112,10 @@ fn clear_working_directory(repo_root: &Path) -> Result<()> {
         }
     }
     
-    // Remove files first
     for file in files_to_remove {
         let _ = fs::remove_file(file);
     }
+    
     dirs_to_remove.sort();
     dirs_to_remove.reverse();
     for dir in dirs_to_remove {

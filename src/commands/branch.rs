@@ -29,3 +29,21 @@ pub fn create(branch_name: String) -> Result<()> {
     println!("Created branch '{}'", branch_name);
     Ok(())
 }
+
+pub fn delete(branch_name: String) -> Result<()> {
+    let mut config = read_config()?;
+    
+    if branch_name == config.current_branch {
+        return Err("Cannot delete current branch".into());
+    }
+    
+    if !config.branches.contains_key(&branch_name) {
+        return Err(format!("Branch '{}' not found", branch_name).into());
+    }
+    
+    config.branches.remove(&branch_name);
+    write_config(&config)?;
+    
+    println!("Deleted branch '{}'", branch_name);
+    Ok(())
+}

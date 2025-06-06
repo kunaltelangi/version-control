@@ -8,14 +8,14 @@ pub mod add;
 pub mod branch;
 pub mod checkout;
 pub mod commit;
+pub mod config;
+pub mod diff;
 pub mod init;
 pub mod log;
+pub mod merge;
+pub mod reset;
+pub mod stash;
 pub mod status;
-pub mod diff;      // New
-pub mod merge;     // New
-pub mod remote;    // New
-pub mod reset;     // New
-pub mod stash;     // New
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -34,7 +34,7 @@ pub struct TreeEntry {
     pub name: String,
     pub hash: String,
     pub is_file: bool,
-    pub mode: String, // file permissions
+    pub mode: String,
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -46,7 +46,7 @@ pub struct Index {
 pub struct IndexEntry {
     pub hash: String,
     pub mode: String,
-    pub stage: u8, // 0 = normal, 1-3 = merge conflict stages
+    pub stage: u8,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -130,7 +130,6 @@ pub fn get_file_mode(path: &Path) -> String {
     }
 }
 
-// Enhanced index operations
 pub fn read_index() -> Result<Index> {
     let kvcs_dir = get_kvcs_dir()?;
     let index_path = kvcs_dir.join("index");
@@ -152,7 +151,6 @@ pub fn write_index(index: &Index) -> Result<()> {
     Ok(())
 }
 
-// Config operations
 pub fn read_config() -> Result<Config> {
     let kvcs_dir = get_kvcs_dir()?;
     let config_path = kvcs_dir.join("config");
@@ -174,7 +172,6 @@ pub fn write_config(config: &Config) -> Result<()> {
     Ok(())
 }
 
-// Object storage
 pub fn store_object(hash: &str, content: &[u8]) -> Result<()> {
     let kvcs_dir = get_kvcs_dir()?;
     let objects_dir = kvcs_dir.join("objects");
@@ -207,7 +204,6 @@ pub fn get_current_commit_hash() -> Result<Option<String>> {
     }
 }
 
-// Stash operations
 pub fn read_stash() -> Result<Stash> {
     let kvcs_dir = get_kvcs_dir()?;
     let stash_path = kvcs_dir.join("stash");

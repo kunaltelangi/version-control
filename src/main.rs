@@ -43,7 +43,7 @@ enum Commands {
     Checkout { 
         target: String,
         #[arg(short, long)]
-        create: bool, // create new branch
+        create: bool,
     },
     Diff {
         #[arg(long)]
@@ -120,7 +120,7 @@ fn main() {
             Some(StashCommands::List) => stash::list(),
             Some(StashCommands::Show { index }) => stash::show(index),
             Some(StashCommands::Drop { index }) => stash::drop(index),
-            None => stash::push(None), // default to push
+            None => stash::push(None),
         },
         Commands::Config { command } => match command {
             ConfigCommands::Set { key, value } => config::set(key, value),

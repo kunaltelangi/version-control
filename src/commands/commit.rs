@@ -1,8 +1,15 @@
 use super::*;
 use chrono::Utc;
 
-pub fn execute(message: String) -> Result<()> {
-    let index = read_index()?;
+pub fn execute(message: String, all: bool) -> Result<()> {
+    let repo_root = get_repo_root()?;
+    let mut index = read_index()?;
+
+    // If -a flag is used, add all tracked files that have been modified
+    if all {
+        add_all_modified_files(&repo_root, &mut index)?;
+        write_index(&index)?;
+    }
     
     if index.files.is_empty() {
         return Err("No changes added to commit".into());
@@ -10,10 +17,11 @@ pub fn execute(message: String) -> Result<()> {
     
     let tree_entries: Vec<TreeEntry> = index.files
         .iter()
-        .map(|(name, hash)| TreeEntry {
+        .map(|(name, entry)| TreeEntry {
             name: name.clone(),
-            hash: hash.clone(),
+            hash: entry.hash.clone(),
             is_file: true,
+            mode: entry.mode.clone(),
         })
         .collect();
     
@@ -22,13 +30,13 @@ pub fn execute(message: String) -> Result<()> {
     
     store_object(&tree_hash, &tree_content)?;
     
-    // Get parent commit
     let parent = get_current_commit_hash()?;
+    let config = read_config()?;
     
     let commit = Commit {
-        hash: String::new(), 
-        message,
-        author: "User <user@example.com>".to_string(), // TODO: Make configurable
+        hash: String::new(),
+        message: message.clone(),
+        author: format!("{} <{}>", config.user_name, config.user_email),
         timestamp: Utc::now(),
         parent,
         tree: tree_hash,
@@ -53,9 +61,44 @@ pub fn execute(message: String) -> Result<()> {
     println!("[{} {}] {}", 
              config.current_branch, 
              &commit_hash[..8], 
-             final_commit.message);
+             message);
     
     println!("{} files changed", index.files.len());
+    
+    Ok(())
+}
+
+fn add_all_modified_files(repo_root: &Path, index: &mut Index) -> Result<()> {
+    use walkdir::WalkDir;
+    use std::fs;
+    
+    for entry in WalkDir::new(repo_root) {
+        let entry = entry?;
+        let path = entry.path();
+        
+        if path.is_file() && !path.starts_with(repo_root.join(".kvcs")) {
+            let relative_path = path.strip_prefix(repo_root)?
+                .to_string_lossy()
+                .replace('\\', "/");
+            
+            // Check if file exists in index or is being tracked
+            if index.files.contains_key(&relative_path) {
+                let content = fs::read(path)?;
+                let hash = hash_content(&content);
+                let mode = get_file_mode(path);
+                
+                store_object(&hash, &content)?;
+                
+                let index_entry = IndexEntry {
+                    hash,
+                    mode,
+                    stage: 0,
+                };
+                
+                index.files.insert(relative_path, index_entry);
+            }
+        }
+    }
     
     Ok(())
 }

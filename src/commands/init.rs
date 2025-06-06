@@ -3,7 +3,7 @@ use std::fs;
 
 pub fn execute() -> Result<()> {
     let current_dir = std::env::current_dir()?;
-    let kvcs_dir = current_dir.join(".vcs");
+    let kvcs_dir = current_dir.join(".kvcs"); // Fixed: was ".vcs"
     
     if kvcs_dir.exists() {
         return Err("Repository already initialized".into());
@@ -24,4 +24,4 @@ pub fn execute() -> Result<()> {
     
     println!("Initialized empty KVCS repository in {}", kvcs_dir.display());
     Ok(())
-} 
+}
