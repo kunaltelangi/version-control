@@ -1,10 +1,13 @@
 use clap::{Parser, Subcommand};
+use std::process;
 
 mod commands;
 
+use commands::*;
+
 #[derive(Parser)]
-#[command(name = "vcs")]
-#[command(about = "A custom version control system", long_about = None)]
+#[command(name = "kvcs")]
+#[command(about = "A Git-like version control system")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -13,19 +16,36 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Init,
-    Add { file: String },
-    Commit { message: String },
+    Add { files: Vec<String> },
+    Status,
+    Commit { 
+        #[arg(short, long)]
+        message: String 
+    },
+    Log,
+    /// Create or list branches
+    Branch { name: Option<String> },
+    Checkout { target: String },
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() {
     let cli = Cli::parse();
 
-    match cli.command {
-        Commands::Init => commands::init::run().await?,
-        Commands::Add { file } => commands::add::run(file).await?,
-        Commands::Commit { message } => commands::commit::run(message).await?,
-    }
+    let result = match cli.command {
+        Commands::Init => init::execute(),
+        Commands::Add { files } => add::execute(files),
+        Commands::Status => status::execute(),
+        Commands::Commit { message } => commit::execute(message),
+        Commands::Log => log::execute(),
+        Commands::Branch { name } => match name {
+            Some(branch_name) => commands::branch::create(branch_name),
+            None => commands::branch::list(),
+        },
+        Commands::Checkout { target } => checkout::execute(target),
+    };
 
-    Ok(())
+    if let Err(e) = result {
+        eprintln!("Error: {}", e);
+        process::exit(1);
+    }
 }

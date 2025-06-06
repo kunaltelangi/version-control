@@ -1,46 +1,61 @@
-use std::fs;
-use std::path::Path;
+use super::*;
 use chrono::Utc;
 
-fn is_repo_initialized() -> bool {
-    Path::new(".vcs").exists()
-}
-
-fn get_commit_id() -> String {
-    Utc::now().format("%Y%m%d%H%M%S").to_string()
-}
-
-pub async fn run(message: String) -> anyhow::Result<()> {
-    if !is_repo_initialized() {
-        println!("No VCS repository found. Run `vcs init` first.");
-        return Ok(());
+pub fn execute(message: String) -> Result<()> {
+    let index = read_index()?;
+    
+    if index.files.is_empty() {
+        return Err("No changes added to commit".into());
     }
-
-    let index_dir = Path::new(".vcs/index");
-    if !index_dir.exists() || fs::read_dir(index_dir)?.next().is_none() {
-        println!("No changes staged for commit.");
-        return Ok(());
-    }
-
-    let commit_id = get_commit_id();
-    let commit_dir = Path::new(".vcs/commits").join(&commit_id);
-    fs::create_dir_all(&commit_dir)?;
-
-    // Copy staged files to commit directory
-    for entry in fs::read_dir(index_dir)? {
-        let entry = entry?;
-        let file_name = entry.file_name();
-        let dest = commit_dir.join(&file_name);
-        fs::copy(entry.path(), dest)?;
-    }
-
-    // Save commit message
-    fs::write(commit_dir.join("message.txt"), message)?;
-
-    // Clear staging area
-    fs::remove_dir_all(index_dir)?;
-    fs::create_dir_all(index_dir)?;
-
-    println!("Committed as {}", commit_id);
+    
+    let tree_entries: Vec<TreeEntry> = index.files
+        .iter()
+        .map(|(name, hash)| TreeEntry {
+            name: name.clone(),
+            hash: hash.clone(),
+            is_file: true,
+        })
+        .collect();
+    
+    let tree_content = serde_json::to_vec(&tree_entries)?;
+    let tree_hash = hash_content(&tree_content);
+    
+    store_object(&tree_hash, &tree_content)?;
+    
+    // Get parent commit
+    let parent = get_current_commit_hash()?;
+    
+    let commit = Commit {
+        hash: String::new(), 
+        message,
+        author: "User <user@example.com>".to_string(), // TODO: Make configurable
+        timestamp: Utc::now(),
+        parent,
+        tree: tree_hash,
+    };
+    
+    let commit_content = serde_json::to_vec(&commit)?;
+    let commit_hash = hash_content(&commit_content);
+    
+    let mut final_commit = commit;
+    final_commit.hash = commit_hash.clone();
+    let final_commit_content = serde_json::to_vec(&final_commit)?;
+    
+    store_object(&commit_hash, &final_commit_content)?;
+    
+    let mut config = read_config()?;
+    config.branches.insert(config.current_branch.clone(), commit_hash.clone());
+    write_config(&config)?;
+    
+    let empty_index = Index::default();
+    write_index(&empty_index)?;
+    
+    println!("[{} {}] {}", 
+             config.current_branch, 
+             &commit_hash[..8], 
+             final_commit.message);
+    
+    println!("{} files changed", index.files.len());
+    
     Ok(())
 }
