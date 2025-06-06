@@ -24,4 +24,4 @@ pub fn execute() -> Result<()> {
     
     println!("Initialized empty KVCS repository in {}", kvcs_dir.display());
     Ok(())
-}
+} 

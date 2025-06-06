@@ -2,47 +2,62 @@ use super::*;
 use std::fs;
 use walkdir::WalkDir;
 
-pub fn execute(files: Vec<String>) -> Result<()> {
+pub fn execute(files: Vec<String>, all: bool) -> Result<()> {
     let repo_root = get_repo_root()?;
     let mut index = read_index()?;
     
-    if files.is_empty() {
+    if all {
+        add_all_tracked(&repo_root, &mut index)?;
+    } else if files.is_empty() {
         return Err("No files specified".into());
-    }
-    
-    for file_pattern in files {
-        if file_pattern == "." {
-            add_directory(&repo_root, &mut index)?;
-        } else {
-            let file_path = repo_root.join(&file_pattern);
-            
-            if file_path.is_file() {
-                add_file(&repo_root, &file_path, &mut index)?;
-            } else if file_path.is_dir() {
-                add_directory(&file_path, &mut index)?;
+    } else {
+        for file_pattern in files {
+            if file_pattern == "." {
+                add_directory(&repo_root, &mut index)?;
             } else {
-                let mut found = false;
-                for entry in WalkDir::new(&repo_root) {
-                    let entry = entry?;
-                    let path = entry.path();
-                    
-                    if path.is_file() {
-                        let relative_path = path.strip_prefix(&repo_root)?;
-                        if relative_path.to_string_lossy().contains(&file_pattern) {
-                            add_file(&repo_root, path, &mut index)?;
-                            found = true;
+                let file_path = repo_root.join(&file_pattern);
+                
+                if file_path.is_file() {
+                    add_file(&repo_root, &file_path, &mut index)?;
+                } else if file_path.is_dir() {
+                    add_directory(&file_path, &mut index)?;
+                } else {
+                    let mut found = false;
+                    for entry in WalkDir::new(&repo_root) {
+                        let entry = entry?;
+                        let path = entry.path();
+                        
+                        if path.is_file() {
+                            let relative_path = path.strip_prefix(&repo_root)?;
+                            if relative_path.to_string_lossy().contains(&file_pattern) {
+                                add_file(&repo_root, path, &mut index)?;
+                                found = true;
+                            }
                         }
                     }
-                }
-                
-                if !found {
-                    println!("Warning: '{}' did not match any files", file_pattern);
+                    
+                    if !found {
+                        println!("Warning: '{}' did not match any files", file_pattern);
+                    }
                 }
             }
         }
     }
     
     write_index(&index)?;
+    Ok(())
+}
+
+fn add_all_tracked(repo_root: &Path, index: &mut Index) -> Result<()> {
+    let tracked_files: Vec<String> = index.files.keys().cloned().collect();
+    
+    for file_path in tracked_files {
+        let full_path = repo_root.join(&file_path);
+        if full_path.exists() {
+            add_file(repo_root, &full_path, index)?;
+        }
+    }
+    
     Ok(())
 }
 
@@ -53,6 +68,7 @@ fn add_file(repo_root: &Path, file_path: &Path, index: &mut Index) -> Result<()>
     
     let content = fs::read(file_path)?;
     let hash = hash_content(&content);
+    let mode = get_file_mode(file_path);
     
     store_object(&hash, &content)?;
     
@@ -60,7 +76,13 @@ fn add_file(repo_root: &Path, file_path: &Path, index: &mut Index) -> Result<()>
         .to_string_lossy()
         .replace('\\', "/"); 
     
-    index.files.insert(relative_path.to_string(), hash);
+    let index_entry = IndexEntry {
+        hash,
+        mode,
+        stage: 0,
+    };
+    
+    index.files.insert(relative_path.to_string(), index_entry);
     println!("Added '{}'", relative_path);
     
     Ok(())

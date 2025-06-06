@@ -11,6 +11,11 @@ pub mod commit;
 pub mod init;
 pub mod log;
 pub mod status;
+pub mod diff;      // New
+pub mod merge;     // New
+pub mod remote;    // New
+pub mod reset;     // New
+pub mod stash;     // New
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -29,17 +34,28 @@ pub struct TreeEntry {
     pub name: String,
     pub hash: String,
     pub is_file: bool,
+    pub mode: String, // file permissions
 }
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Index {
-    pub files: HashMap<String, String>,
+    pub files: HashMap<String, IndexEntry>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct IndexEntry {
+    pub hash: String,
+    pub mode: String,
+    pub stage: u8, // 0 = normal, 1-3 = merge conflict stages
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub current_branch: String,
     pub branches: HashMap<String, String>,
+    pub user_name: String,
+    pub user_email: String,
+    pub remotes: HashMap<String, String>,
 }
 
 impl Default for Config {
@@ -50,10 +66,28 @@ impl Default for Config {
         Self {
             current_branch: "main".to_string(),
             branches,
+            user_name: "User".to_string(),
+            user_email: "user@example.com".to_string(),
+            remotes: HashMap::new(),
         }
     }
 }
 
+#[derive(Serialize, Deserialize, Default)]
+pub struct Stash {
+    pub entries: Vec<StashEntry>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct StashEntry {
+    pub message: String,
+    pub branch: String,
+    pub commit_hash: String,
+    pub index_state: Index,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+// Helper functions
 pub fn get_repo_root() -> Result<PathBuf> {
     let mut current = std::env::current_dir()?;
     
@@ -80,6 +114,23 @@ pub fn hash_content(content: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+pub fn get_file_mode(path: &Path) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = path.metadata() {
+            format!("{:o}", metadata.permissions().mode() & 0o777)
+        } else {
+            "644".to_string()
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        "644".to_string()
+    }
+}
+
+// Enhanced index operations
 pub fn read_index() -> Result<Index> {
     let kvcs_dir = get_kvcs_dir()?;
     let index_path = kvcs_dir.join("index");
@@ -101,6 +152,7 @@ pub fn write_index(index: &Index) -> Result<()> {
     Ok(())
 }
 
+// Config operations
 pub fn read_config() -> Result<Config> {
     let kvcs_dir = get_kvcs_dir()?;
     let config_path = kvcs_dir.join("config");
@@ -122,6 +174,7 @@ pub fn write_config(config: &Config) -> Result<()> {
     Ok(())
 }
 
+// Object storage
 pub fn store_object(hash: &str, content: &[u8]) -> Result<()> {
     let kvcs_dir = get_kvcs_dir()?;
     let objects_dir = kvcs_dir.join("objects");
@@ -152,4 +205,26 @@ pub fn get_current_commit_hash() -> Result<Option<String>> {
         Some(hash) if !hash.is_empty() => Ok(Some(hash.clone())),
         _ => Ok(None),
     }
+}
+
+// Stash operations
+pub fn read_stash() -> Result<Stash> {
+    let kvcs_dir = get_kvcs_dir()?;
+    let stash_path = kvcs_dir.join("stash");
+    
+    if !stash_path.exists() {
+        return Ok(Stash::default());
+    }
+    
+    let content = fs::read_to_string(stash_path)?;
+    Ok(serde_json::from_str(&content)?)
+}
+
+pub fn write_stash(stash: &Stash) -> Result<()> {
+    let kvcs_dir = get_kvcs_dir()?;
+    let stash_path = kvcs_dir.join("stash");
+    
+    let content = serde_json::to_string_pretty(stash)?;
+    fs::write(stash_path, content)?;
+    Ok(())
 }
