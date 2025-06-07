@@ -20,6 +20,7 @@ pub fn execute() -> Result<()> {
     
     println!();
     
+    // Collect working files
     let mut working_files = HashSet::new();
     for entry in WalkDir::new(&repo_root) {
         let entry = entry?;
@@ -37,19 +38,23 @@ pub fn execute() -> Result<()> {
     
     let mut modified_files = Vec::new();
     let mut staged_for_commit = Vec::new();
+    let mut deleted_files = Vec::new();
     
-    for (file_path, indexed_hash) in &index.files {
+    // Check staged files
+    for (file_path, index_entry) in &index.files {
         let full_path = repo_root.join(file_path);
         
         if full_path.exists() {
             let content = fs::read(&full_path)?;
             let current_hash = hash_content(&content);
             
-            if current_hash != *indexed_hash {
+            if current_hash != index_entry.hash {
                 modified_files.push(file_path.clone());
             } else {
                 staged_for_commit.push(file_path.clone());
             }
+        } else {
+            deleted_files.push(file_path.clone());
         }
     }
     
@@ -58,42 +63,46 @@ pub fn execute() -> Result<()> {
         .cloned()
         .collect();
     
-    let deleted_files: Vec<String> = staged_files
-        .difference(&working_files)
-        .cloned()
-        .collect();
-    
+    // Display results
     if !staged_for_commit.is_empty() {
         println!("Changes to be committed:");
+        println!("  (use \"kvcs reset HEAD <file>...\" to unstage)");
+        println!();
         for file in &staged_for_commit {
-            println!("  \x1b[32mnew file:   {}\x1b[0m", file);
+            println!("        \x1b[32mnew file:   {}\x1b[0m", file);
         }
         println!();
     }
     
     if !modified_files.is_empty() {
         println!("Changes not staged for commit:");
-        for file in &modified_files {
-            println!("  \x1b[31mmodified:   {}\x1b[0m", file);
-        }
         println!("  (use \"kvcs add <file>...\" to update what will be committed)");
+        println!("  (use \"kvcs checkout -- <file>...\" to discard changes in working directory)");
+        println!();
+        for file in &modified_files {
+            println!("        \x1b[31mmodified:   {}\x1b[0m", file);
+        }
         println!();
     }
     
     if !deleted_files.is_empty() {
         println!("Changes not staged for commit:");
+        println!("  (use \"kvcs add <file>...\" to update what will be committed)");
+        println!("  (use \"kvcs checkout -- <file>...\" to discard changes in working directory)");
+        println!();
         for file in &deleted_files {
-            println!("  \x1b[31mdeleted:    {}\x1b[0m", file);
+            println!("        \x1b[31mdeleted:    {}\x1b[0m", file);
         }
         println!();
     }
     
     if !untracked_files.is_empty() {
         println!("Untracked files:");
-        for file in &untracked_files {
-            println!("  \x1b[31m{}\x1b[0m", file);
-        }
         println!("  (use \"kvcs add <file>...\" to include in what will be committed)");
+        println!();
+        for file in &untracked_files {
+            println!("        \x1b[31m{}\x1b[0m", file);
+        }
         println!();
     }
     

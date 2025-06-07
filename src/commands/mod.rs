@@ -16,6 +16,7 @@ pub mod merge;
 pub mod reset;
 pub mod stash;
 pub mod status;
+pub mod info; // NEW MODULE
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -37,7 +38,7 @@ pub struct TreeEntry {
     pub mode: String,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct Index {
     pub files: HashMap<String, IndexEntry>,
 }
@@ -139,7 +140,11 @@ pub fn read_index() -> Result<Index> {
     }
     
     let content = fs::read_to_string(index_path)?;
-    Ok(serde_json::from_str(&content)?)
+    if content.trim().is_empty() {
+        return Ok(Index::default());
+    }
+    
+    Ok(serde_json::from_str(&content).unwrap_or_default())
 }
 
 pub fn write_index(index: &Index) -> Result<()> {
@@ -160,7 +165,11 @@ pub fn read_config() -> Result<Config> {
     }
     
     let content = fs::read_to_string(config_path)?;
-    Ok(serde_json::from_str(&content)?)
+    if content.trim().is_empty() {
+        return Ok(Config::default());
+    }
+    
+    Ok(serde_json::from_str(&content).unwrap_or_default())
 }
 
 pub fn write_config(config: &Config) -> Result<()> {
@@ -173,6 +182,10 @@ pub fn write_config(config: &Config) -> Result<()> {
 }
 
 pub fn store_object(hash: &str, content: &[u8]) -> Result<()> {
+    if hash.len() < 2 {
+        return Err("Invalid hash length".into());
+    }
+    
     let kvcs_dir = get_kvcs_dir()?;
     let objects_dir = kvcs_dir.join("objects");
     let (prefix, suffix) = hash.split_at(2);
@@ -186,11 +199,19 @@ pub fn store_object(hash: &str, content: &[u8]) -> Result<()> {
 }
 
 pub fn read_object(hash: &str) -> Result<Vec<u8>> {
+    if hash.len() < 2 {
+        return Err("Invalid hash length".into());
+    }
+    
     let kvcs_dir = get_kvcs_dir()?;
     let objects_dir = kvcs_dir.join("objects");
     let (prefix, suffix) = hash.split_at(2);
     
     let file_path = objects_dir.join(prefix).join(suffix);
+    if !file_path.exists() {
+        return Err(format!("Object {} not found", hash).into());
+    }
+    
     Ok(fs::read(file_path)?)
 }
 
@@ -213,7 +234,11 @@ pub fn read_stash() -> Result<Stash> {
     }
     
     let content = fs::read_to_string(stash_path)?;
-    Ok(serde_json::from_str(&content)?)
+    if content.trim().is_empty() {
+        return Ok(Stash::default());
+    }
+    
+    Ok(serde_json::from_str(&content).unwrap_or_default())
 }
 
 pub fn write_stash(stash: &Stash) -> Result<()> {

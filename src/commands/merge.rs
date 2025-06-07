@@ -23,17 +23,13 @@ pub fn execute(branch: String, no_ff: bool) -> Result<()> {
         return Ok(());
     }
     
-    // Simple merge strategy: take all files from target branch
-    // In a real implementation, you'd need proper 3-way merge logic
     let repo_root = get_repo_root()?;
     restore_files_from_commit(&repo_root, &target_commit)?;
     
-    // Add all files to index
     let mut index = Index::default();
     add_all_files_to_index(&repo_root, &mut index)?;
     write_index(&index)?;
     
-    // Create merge commit
     let merge_message = if no_ff {
         format!("Merge branch '{}' (no-ff)", branch)
     } else {
@@ -97,7 +93,6 @@ fn create_merge_commit(message: String, parent1: String, parent2: String) -> Res
     
     let config = read_config()?;
     
-    // Create a merge commit with two parents
     let commit = Commit {
         hash: String::new(),
         message: message.clone(),

@@ -1,11 +1,12 @@
 use super::*;
 use chrono::Utc;
+use std::fs;
+use walkdir::WalkDir;
 
 pub fn execute(message: String, all: bool) -> Result<()> {
     let repo_root = get_repo_root()?;
     let mut index = read_index()?;
 
-    // If -a flag is used, add all tracked files that have been modified
     if all {
         add_all_modified_files(&repo_root, &mut index)?;
         write_index(&index)?;
@@ -34,7 +35,7 @@ pub fn execute(message: String, all: bool) -> Result<()> {
     let config = read_config()?;
     
     let commit = Commit {
-        hash: String::new(),
+        hash: String::new(), 
         message: message.clone(),
         author: format!("{} <{}>", config.user_name, config.user_email),
         timestamp: Utc::now(),
@@ -69,9 +70,6 @@ pub fn execute(message: String, all: bool) -> Result<()> {
 }
 
 fn add_all_modified_files(repo_root: &Path, index: &mut Index) -> Result<()> {
-    use walkdir::WalkDir;
-    use std::fs;
-    
     for entry in WalkDir::new(repo_root) {
         let entry = entry?;
         let path = entry.path();
@@ -81,7 +79,6 @@ fn add_all_modified_files(repo_root: &Path, index: &mut Index) -> Result<()> {
                 .to_string_lossy()
                 .replace('\\', "/");
             
-            // Check if file exists in index or is being tracked
             if index.files.contains_key(&relative_path) {
                 let content = fs::read(path)?;
                 let hash = hash_content(&content);

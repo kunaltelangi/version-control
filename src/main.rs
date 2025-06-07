@@ -70,6 +70,7 @@ enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
+    Info,
 }
 
 #[derive(Subcommand)]
@@ -127,6 +128,7 @@ fn main() {
             ConfigCommands::Get { key } => config::get(key),
             ConfigCommands::List => config::list(),
         },
+        Commands::Info => info::execute(),
     };
 
     if let Err(e) = result {
